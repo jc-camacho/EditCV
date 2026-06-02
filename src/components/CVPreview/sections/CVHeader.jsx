@@ -6,6 +6,14 @@ function getSocialUrl(network, username) {
   return null
 }
 
+function getSocialDisplayText(network, username) {
+  const n = (network || '').toLowerCase()
+  if (n === 'linkedin') return `linkedin.com/in/${username}`
+  if (n === 'github')   return `github.com/${username}`
+  if (n === 'twitter' || n === 'x') return `x.com/${username}`
+  return username
+}
+
 export default function CVHeader({ cv }) {
   const socials = cv.social_networks || []
   const customs = cv.custom_connections || []
@@ -18,7 +26,7 @@ export default function CVHeader({ cv }) {
     cv.phone    && { text: cv.phone,    href: `https://wa.me/${cv.phone.replace(/[\s+\-().]/g, '')}`, type: 'phone' },
     cv.website  && { text: cv.website.replace(/^https?:\/\//, ''), href: cv.website, type: 'website' },
     ...socials.map(s => s.username
-      ? { text: s.username, href: getSocialUrl(s.network, s.username), type: 'social', network: s.network }
+      ? { text: getSocialDisplayText(s.network, s.username), href: s.url || getSocialUrl(s.network, s.username), type: 'social', network: s.network }
       : null
     ),
     ...customs.filter(Boolean).map(c => ({ text: c, type: 'custom' })),
