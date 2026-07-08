@@ -6,6 +6,7 @@ import Navbar from './components/Navbar/Navbar'
 import Sidebar from './components/Sidebar/Sidebar'
 import Editor from './components/Editor/Editor'
 import CVPreview from './components/CVPreview/CVPreview'
+import ExportModal from './components/ExportModal/ExportModal'
 import { parseCV } from './utils/yamlParser'
 import { loadCVs, saveCV, createCV, getActiveId, setActiveId } from './utils/storage'
 import { exportToPDF } from './utils/pdfExport.jsx'
@@ -29,6 +30,7 @@ function AppInner() {
   const [parseError, setParseError] = useState(null)       // YAML parse error message, if any
   const [exporting, setExporting] = useState(false)        // True while PDF export is in progress
   const [zoom, setZoom]           = useState(100)          // Preview zoom level (25–200)
+  const [showExportModal, setShowExportModal] = useState(false) // Filename prompt before export
 
   const saveTimerRef    = useRef(null)      // Holds the debounce timer ID for auto-save
   const previewPaneRef  = useRef(null)      // Ref to the preview pane DOM element for ResizeObserver
@@ -66,7 +68,9 @@ function AppInner() {
 
     // Restore the last active CV, falling back to the first one
     const lastActiveId = getActiveId()
-    const activeCV     = storedCVs.find(c => c.id === lastActiveId) || storedCVs[0]
+    const activeCV     = storedCVs.find(c => c.id === lastActiveId)
+      || storedCVs.find(c => !c.archived)
+      || storedCVs[0]
     setActiveCVId(activeCV.id)
     setActiveId(activeCV.id)
     setYamlText(activeCV.yaml)
@@ -109,16 +113,21 @@ function AppInner() {
     setCVs(loadCVs())
   }
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (chosenName) => {
     if (!parsedCV || exporting) return
     setExporting(true)
     try {
-      const filename = `${parsedCV?.name || 'cv'}.pdf`
+      const filename = `${chosenName || parsedCV?.name || 'cv'}.pdf`
       await exportToPDF(parsedCV, filename, template)
     } finally {
       setExporting(false)
     }
   }, [parsedCV, exporting, template])
+
+  function handleConfirmExport(chosenName) {
+    setShowExportModal(false)
+    handleExport(chosenName)
+  }
 
   return (
     <div className="app">
@@ -155,7 +164,7 @@ function AppInner() {
               </select>
               <button
                 className="exportBtn"
-                onClick={handleExport}
+                onClick={() => setShowExportModal(true)}
                 disabled={exporting || !!parseError || !parsedCV}
               >
                 {exporting ? 'Exporting...' : '⬇ Download PDF'}
@@ -165,6 +174,13 @@ function AppInner() {
           </div>
         </div>
       </div>
+      {showExportModal && (
+        <ExportModal
+          defaultName={parsedCV?.name || 'cv'}
+          onConfirm={handleConfirmExport}
+          onCancel={() => setShowExportModal(false)}
+        />
+      )}
     </div>
   )
 }

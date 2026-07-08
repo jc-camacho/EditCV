@@ -28,6 +28,7 @@ export function createCV(name = 'New CV') {
     name,
     yaml: defaultYaml(name),
     updatedAt: new Date().toISOString(),
+    archived: false,
   }
 }
 

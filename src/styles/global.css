@@ -409,6 +409,40 @@ body {
   outline: none;
 }
 
+.archivedSection {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.archivedToggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0.45rem 0.6rem 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+.archivedToggle:hover {
+  color: var(--text-primary);
+}
+
+.archivedSection .item {
+  opacity: 0.65;
+}
+
+.archivedSection .item:hover,
+.archivedSection .item.active {
+  opacity: 1;
+}
+
 /* ── Editor ─────────────────────────────────────────────────── */
 .editorWrapper {
   display: flex;
@@ -501,5 +535,126 @@ body {
   text-align: center;
   margin-top: 4rem;
   font-family: sans-serif;
+}
+
+/* ── Export Modal ───────────────────────────────────────────── */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: modalFadeIn 0.12s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modalCard {
+  width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.12);
+  padding: 1.5rem;
+  animation: modalSlideUp 0.14s ease-out;
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modalTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.modalSubtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.1rem;
+}
+
+.modalInputWrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 0.75rem;
+  transition: border-color 0.12s;
+}
+
+.modalInputWrap:focus-within {
+  border-color: var(--accent);
+}
+
+.modalInput {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0.6rem 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.modalInputSuffix {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.modalBtnGhost {
+  padding: 0.5rem 0.9rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.modalBtnGhost:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.modalBtnPrimary {
+  padding: 0.5rem 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.modalBtnPrimary:hover {
+  opacity: 0.88;
+}
+
+.modalBtnPrimary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
