@@ -27,14 +27,58 @@ let worker       = null
 let readyPromise = null
 let queue        = Promise.resolve() // pdfTeX can only run one compilation at a time
 
+/**
+ * Engine start-up progress, for the UI. pdfTeX reports nothing while it
+ * compiles, but downloading the TeX bundle (the slow part on a first visit)
+ * can be measured:
+ *   { phase: 'download', loaded, total }  bytes so far; total is 0 when unknown
+ *   { phase: 'prepare' }                  unpacking the bundle, booting the worker
+ *   null                                  not loading (ready, or not started)
+ */
+let loadProgress = null
+const progressListeners = new Set()
+
+function reportProgress(progress) {
+  loadProgress = progress
+  for (const listener of progressListeners) listener(progress)
+}
+
+/** Calls `listener` with the current progress now and on every change; returns an unsubscribe function. */
+export function onEngineProgress(listener) {
+  progressListeners.add(listener)
+  listener(loadProgress)
+  return () => progressListeners.delete(listener)
+}
+
 async function fetchBundleFile(path) {
   const response = await fetch(BUNDLE_URL + path)
   if (!response.ok) throw new Error(`Could not load ${BUNDLE_URL}${path} (HTTP ${response.status}).`)
   return response
 }
 
-async function inflate(response) {
-  const data = new Uint8Array(await response.arrayBuffer())
+/** Reads the whole body, reporting each chunk as download progress. */
+async function download(response) {
+  // Content-Length is the size on the wire: when the server compresses on the
+  // fly the body yields more bytes than that, so the total is unknown
+  const total  = response.headers.get('content-encoding') ? 0 : Number(response.headers.get('content-length')) || 0
+  const reader = response.body.getReader()
+  const chunks = []
+  let loaded   = 0
+  reportProgress({ phase: 'download', loaded, total })
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    loaded += value.length
+    reportProgress({ phase: 'download', loaded, total })
+  }
+  const data = new Uint8Array(loaded)
+  let offset = 0
+  for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length }
+  return data
+}
+
+async function inflate(data) {
   // The server may already have removed the gzip layer (Content-Encoding)
   if (data[0] !== 0x1f || data[1] !== 0x8b) return data.buffer
   return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
@@ -43,7 +87,9 @@ async function inflate(response) {
 /** The manifest plus every file in the archive, ready to hand to the worker. */
 async function loadBundle() {
   const manifest = await (await fetchBundleFile('manifest.json')).json()
-  const archive  = await inflate(await fetchBundleFile(manifest.bundle))
+  const packed   = await download(await fetchBundleFile(manifest.bundle))
+  reportProgress({ phase: 'prepare' })
+  const archive  = await inflate(packed)
   const preload  = manifest.entries.map(([key, offset, length]) => ({
     key,
     name: key.split('/').pop(),
@@ -76,8 +122,10 @@ function startEngine() {
       worker.postMessage({ cmd: 'settexliveurl', url: new URL(ENGINE_DIR, location.href).href })
       worker.postMessage({ cmd: 'settexlivefiles', files })
       for (const file of preload) worker.postMessage({ cmd: 'addtexfile', ...file }, [file.src])
+      reportProgress(null)
     })
     .catch(error => {
+      reportProgress(null)
       // Allow a later retry instead of caching the failure forever
       worker?.terminate()
       worker       = null

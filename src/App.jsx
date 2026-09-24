@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Navbar from './components/Navbar'
 import Sidebar from './components/Sidebar'
 import Editor from './components/Editor'
-import PdfPreview from './components/PdfPreview'
+import PdfPreview, { downloadPercent } from './components/PdfPreview'
 import ExportModal from './components/ExportModal'
 import Splitter from './components/Splitter'
 import { TEMPLATES, DEFAULT_TEMPLATE } from './latex/templates'
@@ -144,6 +144,11 @@ export default function App() {
   // The PDF on screen must match the current YAML before it can be downloaded
   const pdfIsCurrent = latex.status === 'ready' && !parseError && !!parsedCV
 
+  const enginePercent = downloadPercent(latex.engineProgress)
+  const busyLabel = latex.engineProgress
+    ? `loading engine${enginePercent != null ? ` ${enginePercent}%` : '…'}`
+    : latex.status === 'compiling' ? 'compiling…' : null
+
   return (
     <div className="app">
       <Navbar theme={theme} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
@@ -158,7 +163,12 @@ export default function App() {
             <div className="paneHeader">
               <span className="paneLabel">
                 Preview — US Letter
-                {latex.status === 'compiling' && <span className="compileStatus"> · compiling…</span>}
+                {busyLabel && (
+                  <span className="compileStatus">
+                    <span className="spinner sm" aria-hidden="true" />
+                    {busyLabel}
+                  </span>
+                )}
               </span>
               <div className="toolbarGroup">
                 <button className="btnIcon filled" onClick={() => setZoom(z => clampZoom(z - 10))} title="Zoom out">−</button>
@@ -173,7 +183,7 @@ export default function App() {
                 ⬇ Download PDF
               </button>
             </div>
-            <PdfPreview pdf={latex.pdf} zoom={zoom} status={latex.status} error={latex.error} />
+            <PdfPreview pdf={latex.pdf} zoom={zoom} status={latex.status} error={latex.error} engineProgress={latex.engineProgress} />
           </div>
         </div>
       </div>

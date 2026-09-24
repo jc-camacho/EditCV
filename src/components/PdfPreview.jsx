@@ -106,7 +106,46 @@ function useDragToScroll() {
   return { ref, className, onPointerDown, onPointerOver: () => setPannable(canScroll(ref.current)) }
 }
 
-export default function PdfPreview({ pdf, zoom = 100, status, error }) {
+const formatMB = bytes => `${(bytes / 1048576).toFixed(1)} MB`
+
+/** Percentage of the engine download, or null when it can't be measured. */
+export function downloadPercent(progress) {
+  if (progress?.phase !== 'download' || !progress.total) return null
+  return Math.min(100, Math.round((progress.loaded / progress.total) * 100))
+}
+
+/** Spinner plus what the engine is doing; a progress bar while the download size is known. */
+function LoadingState({ status, engineProgress }) {
+  const percent = downloadPercent(engineProgress)
+  let message = 'Loading LaTeX engine…'
+  let detail  = null
+
+  if (engineProgress?.phase === 'download') {
+    message = 'Downloading LaTeX engine…'
+    detail  = percent != null
+      ? `${percent}% · ${formatMB(engineProgress.loaded)} of ${formatMB(engineProgress.total)}`
+      : formatMB(engineProgress.loaded)
+  } else if (engineProgress?.phase === 'prepare') {
+    message = 'Preparing LaTeX engine…'
+  } else if (status === 'compiling') {
+    message = 'Compiling LaTeX…'
+  }
+
+  return (
+    <div className="emptyState" role="status">
+      <div className="spinner" aria-hidden="true" />
+      <div>{message}</div>
+      {detail && <div className="loadingDetail">{detail}</div>}
+      {percent != null && (
+        <div className="progressBar" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function PdfPreview({ pdf, zoom = 100, status, error, engineProgress }) {
   const [doc, setDoc] = useState(null)
   const { className: panClass, ...panHandlers } = useDragToScroll()
 
@@ -136,11 +175,7 @@ export default function PdfPreview({ pdf, zoom = 100, status, error }) {
           <PdfPage key={i} doc={doc} pageNumber={i + 1} zoom={zoom} />
         ))
       ) : (
-        !error && (
-          <div className="emptyState">
-            {status === 'compiling' ? 'Compiling LaTeX…' : 'Loading LaTeX engine…'}
-          </div>
-        )
+        !error && <LoadingState status={status} engineProgress={engineProgress} />
       )}
     </div>
   )

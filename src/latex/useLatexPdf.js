@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { generateLatex } from './generateLatex'
-import { compileLatex, preloadLatexEngine } from './engine'
+import { compileLatex, onEngineProgress, preloadLatexEngine } from './engine'
 import { extractLatexError } from './escape'
 
 const COMPILE_DELAY_MS = 400
@@ -11,12 +11,18 @@ const COMPILE_DELAY_MS = 400
  * compilation runs or fails, so the preview never goes blank.
  *
  * status: 'idle' | 'compiling' | 'ready' | 'error'
+ * engineProgress: see onEngineProgress in ./engine (null once the engine is loaded)
  */
 export function useLatexPdf(cvData, templateId) {
   const [state, setState] = useState({ pdf: null, status: 'idle', error: null })
+  const [engineProgress, setEngineProgress] = useState(null)
   const latestRequestRef  = useRef(0)
 
-  useEffect(() => { preloadLatexEngine() }, [])
+  useEffect(() => {
+    const unsubscribe = onEngineProgress(setEngineProgress)
+    preloadLatexEngine()
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (!cvData) return
@@ -47,5 +53,5 @@ export function useLatexPdf(cvData, templateId) {
     return () => clearTimeout(timer)
   }, [cvData, templateId])
 
-  return state
+  return { ...state, engineProgress }
 }

@@ -298,7 +298,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--text-secondary);
 }
 
-.compileStatus { text-transform: none; font-weight: 500; letter-spacing: 0; }
+.compileStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
 
 .toolbarGroup { display: flex; align-items: center; gap: 0.2rem; }
 .paneHeader .toolbarGroup { gap: 0.5rem; }
@@ -425,7 +434,33 @@ textarea.input { resize: vertical; line-height: 1.5; }
    past the left edge where it can no longer be scrolled to */
 .pdfPage { flex-shrink: 0; margin: 0 auto; background: #fff; box-shadow: 0 4px 32px rgba(0, 0, 0, 0.35); }
 
-.emptyState { margin-top: 4rem; font-size: 0.9rem; text-align: center; color: #999; }
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 4rem;
+  font-size: 0.9rem;
+  text-align: center;
+  color: #999;
+}
+.loadingDetail { font-size: 0.78rem; font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner.sm { width: 11px; height: 11px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+.progressBar { width: 220px; max-width: 70%; height: 4px; overflow: hidden; border-radius: 2px; background: var(--border); }
+.progressBar > span { display: block; height: 100%; background: var(--accent); transition: width 0.15s ease-out; }
 
 /* ── Modal ──────────────────────────────────────────────────── */
 .modalBackdrop {
