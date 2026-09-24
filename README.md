@@ -20,8 +20,7 @@
 - [YAML Structure](#yaml-structure)
 - [Automatic Entry Type Detection](#automatic-entry-type-detection)
 - [Inline Markdown](#inline-markdown)
-- [PDF Export](#pdf-export)
-- [Automatic Pagination](#automatic-pagination)
+- [LaTeX Rendering](#latex-rendering)
 - [Persistence](#persistence)
 - [Project Structure](#project-structure)
 - [Data Flow](#data-flow)
@@ -41,7 +40,7 @@ EditCV is a web app that generates a professional CV from a form or a YAML file,
 | **Classic** | Clean serif layout, left-aligned titles |
 | **Modern** | Contemporary sans-serif design with subtle visual hierarchy |
 
-Fill in your information and the app handles layout, typography, and pagination in **US Letter (8.5" × 11")** format. The output is a PDF ready to send — no flashy colors, no photos, no columns.
+Fill in your information and the app turns it into a **LaTeX** document, compiles it with pdfLaTeX **inside your browser** (WebAssembly), and shows the resulting PDF in **US Letter (8.5" × 11")** format. The output is a real, text-based PDF ready to send: selectable, searchable, and readable by ATS parsers.
 
 ---
 
@@ -52,17 +51,18 @@ Fill in your information and the app handles layout, typography, and pagination 
 | 📋 **Form editor** | Visual UI with fields per entry type — no YAML required |
 | 📝 **YAML editor** | Full Monaco editor with syntax highlighting and error detection |
 | 🔀 **Mode toggle** | Switch between Form and YAML at any time — data stays in sync |
-| 👁 **Live preview** | CV updates instantly on every change |
-| 🎨 **3 templates** | Harvard (Times New Roman), Classic, and Modern — switchable from the navbar |
+| 👁 **Live preview** | The compiled PDF refreshes shortly after every change |
+| 🎨 **3 templates** | Harvard (Times New Roman), Classic, and Modern — switchable from the preview toolbar |
 | ➕ **Custom sections** | Add any section with any name you want |
 | ↕ **Reorder sections** | Move sections up/down with ↑↓ buttons — order is reflected in the PDF |
 | ✎ **Rename sections** | Inline name editing directly in the section header |
 | 💾 **Autosave** | Every change is saved to `localStorage` with a 600ms debounce |
 | 📂 **Multiple CVs** | Create, rename, and delete CVs from the sidebar |
-| ⬇ **PDF export** | One-click download in US Letter format, ready to send |
-| 🔍 **Preview zoom** | Control the preview zoom level (25% – 200%) |
+| ⬇ **PDF export** | Downloads exactly the PDF shown in the preview |
+| 🔍 **Preview zoom** | Control the preview zoom level (25% – 250%) |
+| ↔ **Resizable panes** | Drag the divider between editor and preview (arrow keys also work; double-click resets) |
 | 🌙 **Dark / Light mode** | Theme toggle in the navbar, persisted across sessions |
-| 🔌 **100% offline** | No backend, no database, no tracking |
+| 🔌 **No backend** | No server, no database, no tracking — LaTeX and its fonts ship with the app, so nothing is fetched from third parties |
 
 ---
 
@@ -83,7 +83,8 @@ cd editcv
 # 2. Install dependencies
 npm install
 
-# 3. Start the dev server
+# 3. Start the dev server (the LaTeX engine and its TeX files are already
+#    in public/swiftlatex/ — see public/swiftlatex/README.md)
 npm run dev
 ```
 
@@ -370,28 +371,28 @@ cv:
 The renderer detects which component to use based on the **fields present** in each entry, not on the section name. This means you can name your sections anything you want.
 
 ```
-Has "institution"?                           → EntryEducation
-Has "company"?                               → EntryExperience
-Has "title" AND "authors"?                   → EntryPublication
-Has "name" AND ("start_date" OR "date" OR "highlights")? → EntryProject
-Has "label" AND "details"?                   → EntrySkill
-Has "bullet"?                                → EntryGeneric (bullet)
-Has "reversed_number" or "number"?           → EntryGeneric (numbered)
-Is a plain string?                           → EntryGeneric (free text)
+Has "institution"?                           → \cveducation
+Has "company"?                               → \cventry
+Has "title" AND "authors"?                   → \cvpublication
+Has "name" AND ("start_date" OR "date" OR "highlights")? → \cventry (project)
+Has "label" AND "details"?                   → \cvskill
+Has "bullet"?                                → cvbullets list
+Has "reversed_number" or "number"?           → cvbullets list
+Is a plain string / has "summary"?           → \cvtext (free text)
 ```
 
 **Example:** you can name a section `jobs` instead of `experience` and it will work exactly the same, because the entries inside have the `company` field.
 
-| Fields present | Detected type | Component used |
+| Fields present | Detected type | LaTeX output |
 |---|---|---|
-| `institution` | Education | `EntryEducation` |
-| `company` | Experience | `EntryExperience` |
-| `title` + `authors` | Publication | `EntryPublication` |
-| `name` + `start_date`/`date`/`highlights` | Project | `EntryProject` |
-| `label` + `details` | Skill | `EntrySkill` |
-| `bullet` | Simple bullet | `EntryGeneric` |
-| `reversed_number` / `number` | Numbered item | `EntryGeneric` |
-| Plain string | Free text | `EntryGeneric` |
+| `institution` | Education | `\cveducation` |
+| `company` | Experience | `\cventry` |
+| `title` + `authors` | Publication | `\cvpublication` |
+| `name` + `start_date`/`date`/`highlights` | Project | `\cventry` |
+| `label` + `details` | Skill | `\cvskill` |
+| `bullet` | Simple bullet | `cvbullets` |
+| `reversed_number` / `number` | Numbered item | `cvbullets` |
+| Plain string / `summary` | Free text | `\cvtext` |
 
 ---
 
@@ -422,74 +423,44 @@ authors:
 
 ---
 
-## PDF Export
+## LaTeX Rendering
 
-Click **⬇ Download PDF** in the preview toolbar.
-
-### Export pipeline
+Everything after the editor is LaTeX:
 
 ```
-exportToPDF(cvData)
-      │
-      ├─ Step 1: Measure heights
-      │    Mount the full CV in a hidden off-screen div (left: -9999px)
-      │    Measure each section's height with getBoundingClientRect()
-      │
-      ├─ Step 2: Paginate
-      │    Apply the same algorithm as the live preview
-      │    Distribute sections across pages with 992px of usable content each
-      │
-      └─ Step 3: Capture and build PDF
-           For each page:
-             Mount page content in a 816×1056px hidden div
-             Capture with html2canvas at 3× scale → ~2448×3168px
-             Add as JPEG (quality 0.92) to the PDF document
-           Save as {cv-name}.pdf
+parsedCV ──► generateLatex(cv, template) ──► main.tex
+                                                │
+                              compileLatex()    ▼
+                     pdfTeX (WebAssembly, Web Worker)
+                                                │
+                                                ▼
+                                   PDF bytes (Uint8Array)
+                                     │               │
+                                     ▼               ▼
+                          PdfPreview (pdf.js)   ⬇ Download PDF
 ```
+
+- **Generator** (`src/latex/generateLatex.js`): emits only content, through a small macro interface (`\cvheader`, `\cvsection`, `\cventry`, `\cveducation`, `\cvpublication`, `\cvskill`, `\cvtext`, and the `cvhighlights` / `cvbullets` lists).
+- **Templates** (`src/latex/templates/`): each template is a pdfLaTeX preamble that defines those macros, so Harvard, Classic, and Modern differ only in their preamble.
+- **Escaping** (`src/latex/escape.js`): all user text is escaped (`& % $ # _ { } ~ ^ \`). Characters pdfLaTeX can't typeset, such as emoji, are dropped so they can't break the build.
+- **Engine** (`src/latex/engine.js`): SwiftLaTeX's pdfTeX runs in a Web Worker and reads its format, packages and fonts from a bundle in `public/swiftlatex/pdftex/` (built by `npm run build:texlive`). Compilations are queued and debounced by 400 ms. If a compilation fails, the preview keeps the last good PDF and shows the first TeX error above it.
 
 ### PDF specs
 
 | Parameter | Value |
 |---|---|
-| Page size | US Letter (8.5" × 11" / 612pt × 792pt) |
-| Capture resolution | 3× (high resolution) |
-| Image format | JPEG, quality 0.92 |
-| Background | White (ignores the app's dark theme) |
-| Typeface | Depends on selected template (e.g. Times New Roman for Harvard) |
+| Page size | US Letter (8.5" × 11") |
+| Engine | pdfLaTeX (SwiftLaTeX WebAssembly build) |
+| Text | Real text with `glyphtounicode` mappings: selectable and ATS-friendly |
+| Links | Clickable (email, phone → WhatsApp chat, website, social profiles, DOIs, markdown links) |
+| Fonts | Harvard: Times (`mathptmx`) · Classic: Charter · Modern: Helvetica |
 | Filename | `{cv-name}.pdf` |
 
-> The button is disabled if there are YAML syntax errors.
+> The download button is disabled while the PDF is out of date: YAML errors, a failed LaTeX compilation, or a compilation still running.
 
----
+### Pagination
 
-## Automatic Pagination
-
-Both the live preview and the PDF export use the same pagination algorithm to guarantee they are always identical:
-
-```
-Available height per page = 1056px − 32px (top pad) − 32px (bottom pad) = 992px
-
-For each content block (header, section):
-  If accumulated_height + block_height > 992px:
-    → Start a new page
-  Add block to current page
-  accumulated_height += block_height
-```
-
-This prevents a section from being cut in half across two pages. If a single section is taller than a full page, it occupies that page entirely.
-
-In the preview, a page break is shown as a dark strip between two white sheets:
-
-```
-┌─────────────────┐
-│  ...content     │  ← Page 1
-│  ...            │
-└─────────────────┘
-  ░░░░░░░░░░░░░░░    ← Visual separator (not in the PDF)
-┌─────────────────┐
-│  ...continues   │  ← Page 2
-└─────────────────┘
-```
+LaTeX paginates the document. Page breaks can fall between entries, so a long section simply continues on the next page. A section title is never left alone at the bottom of a page.
 
 ---
 
@@ -516,56 +487,40 @@ editcv/
 ├── index.html
 ├── vite.config.js
 ├── package.json
+├── scripts/                         # TeX bundle builder (npm run build:texlive)
+├── public/
+│   └── swiftlatex/                  # pdfTeX WebAssembly engine (see its README)
+│       └── pdftex/                  # Bundled TeX files + manifest.json (generated)
 │
 └── src/
     ├── main.jsx                    # React entry point
-    ├── App.jsx                     # Root component — global state and layout
+    ├── App.jsx                     # Root component — CVs, theme, template, zoom, autosave
+    ├── styles.css                  # The only stylesheet: theme variables, layout, components
     │
-    ├── context/
-    │   ├── ThemeContext.jsx         # Dark/light mode via React Context + localStorage
-    │   └── TemplateContext.jsx      # Active template (Harvard / Classic / Modern)
-    │
-    ├── templates/
-    │   └── index.js                 # Template definitions: font, padding, date format
-    │
-    ├── styles/
-    │   ├── global.css               # CSS variables, reset, layout, CV page styles
-    │   ├── cv-harvard.css           # Harvard template styles
-    │   ├── cv-classic.css           # Classic template styles
-    │   └── cv-modern.css            # Modern template styles
+    ├── latex/
+    │   ├── generateLatex.js         # CV object → complete .tex document
+    │   ├── escape.js                # LaTeX escaping + inline markdown → LaTeX
+    │   ├── engine.js                # SwiftLaTeX pdfTeX worker wrapper (compile queue)
+    │   ├── useLatexPdf.js           # Hook: debounce → generate → compile → PDF bytes
+    │   └── templates/
+    │       ├── index.js             # Template registry: label, date format, preamble
+    │       ├── base.js              # Shared preamble + macro interface docs
+    │       ├── harvard.js
+    │       ├── classic.js
+    │       └── modern.js
     │
     ├── utils/
-    │   ├── yamlParser.js            # js-yaml wrapper + entry type detection logic
-    │   ├── storage.js               # localStorage CRUD + default YAML template
-    │   ├── pdfExport.jsx            # Export pipeline: measure → paginate → capture → PDF
-    │   └── markdown.js              # Regex-based inline markdown renderer
+    │   ├── yamlParser.js            # js-yaml wrapper, entry type detection, date formatting
+    │   └── storage.js               # localStorage: CVs, active CV, theme + default YAML
     │
     └── components/
-        │
-        ├── Navbar/
-        │   └── Navbar.jsx           # Top bar with theme and template toggles
-        │
-        ├── Sidebar/
-        │   └── Sidebar.jsx          # CV list with create / rename / delete
-        │
-        ├── Editor/
-        │   ├── Editor.jsx           # Container with Form/YAML toggle and mode state
-        │   ├── FormEditor.jsx       # Full form UI: personal info, networks, sections
-        │   └── FormEditor.css       # Form styles (uses app CSS variables for theming)
-        │
-        └── CVPreview/
-            ├── CVPreview.jsx        # Paginator + preview renderer
-            ├── CVSection.jsx        # Section title + entry type router
-            ├── MD.jsx               # Component for rendering inline markdown
-            │
-            └── sections/
-                ├── CVHeader.jsx         # Name, headline, contact info, networks
-                ├── EntryEducation.jsx   # institution · degree · highlights
-                ├── EntryExperience.jsx  # company · position · highlights
-                ├── EntryProject.jsx     # name · summary · highlights
-                ├── EntryPublication.jsx # title · authors · journal · doi
-                ├── EntrySkill.jsx       # label: details
-                └── EntryGeneric.jsx     # bullet / numbered / free text
+        ├── Navbar.jsx               # Top bar with the theme toggle
+        ├── Sidebar.jsx              # CV list: create / rename / archive / delete
+        ├── Editor.jsx               # Form/YAML toggle; Monaco is lazy-loaded
+        ├── FormEditor.jsx           # Form UI, driven by one field config per entry type
+        ├── Modal.jsx                # Shared dialog shell (Escape / backdrop close)
+        ├── ExportModal.jsx          # Filename prompt before downloading the PDF
+        └── PdfPreview.jsx           # Renders the compiled PDF pages with pdf.js
 ```
 
 ---
@@ -583,19 +538,13 @@ YAML is the single source of truth. Both the form and the Monaco editor read fro
               │                             │
     ┌─────────┴──────────┐                  │
     │                    │                  ▼
- onChange             onChange         CVPreview.jsx
-    │                    │                  │
-    ▼                    ▼             ┌────┴────┐
-FormEditor.jsx    MonacoEditor    CVHeader   CVSection × N
-    │                                            │
-    │  toYaml(data)                         ┌───┴────────────────┐
-    │  → serializes to YAML string          │  detectEntryType() │
-    │                                       └───────────────────┬┘
-    └──────────────────────────────────────────────────────────►│
-                                                                 ▼
-                                              EntryEducation / EntryExperience /
-                                              EntryProject / EntryPublication /
-                                              EntrySkill / EntryGeneric
+ onChange             onChange       useLatexPdf(parsedCV, template)
+    │                    │                  │  generateLatex() → detectEntryType()
+    ▼                    ▼                  │  compileLatex()  → pdfTeX (WASM)
+FormEditor.jsx    MonacoEditor              ▼
+    │                                  PdfPreview.jsx (pdf.js)
+    │  yaml.dump(data)
+    └─► serializes back to YAML string
 ```
 
 ### Form ↔ YAML sync
@@ -606,24 +555,21 @@ To avoid infinite update loops when the form triggers a YAML change:
 User edits a field in the Form
         │
         ▼
-update(newData)            updates Form's internal state
+applyUpdate(newData)       updates the form's internal state
         │
         ▼
-toYaml(newData)            serializes with js-yaml
+yaml.dump(newData)         serializes with js-yaml
         │
         ▼
 onYamlChange(yamlStr)      propagates to App.jsx via setYamlText
         │
         ▼
-parseCV(yamlText)          useEffect in App.jsx → produces parsedCV
-        │
-        ▼
-setParsedCV(data)          passed as prop to both Form and Preview
+parseCV(yamlText)          useMemo in App.jsx → parsedCV
         │
     ┌───┴────────────────┐
     │                    │
-CVPreview               FormEditor
-re-renders              skipSync = true → ignores the next cvData update
+useLatexPdf             FormEditor
+recompiles the PDF      skipNextSync → ignores the next cvData update
                         (prevents the form from resetting while the user types)
 ```
 
@@ -636,17 +582,14 @@ Initial load
 loadCVs() from localStorage
       │
       ▼
-setYamlText(cv.yaml)     → parseCV() → setParsedCV()
-                                             │
-                                             ▼
-                                        CVPreview renders
+setYamlText(cv.yaml)     → parseCV() → useLatexPdf compiles → PdfPreview renders
 
 Every user change
       │
       ▼
 setYamlText(newValue)
       │
-      ├─ parseCV()  → setParsedCV()  → CVPreview updates (immediate)
+      ├─ parseCV()  → LaTeX regenerated and compiled (debounced 400ms)
       │
       └─ debounce 600ms → saveCV() → localStorage
 ```
@@ -661,10 +604,10 @@ setYamlText(newValue)
 | [Vite](https://vitejs.dev) | 5 | Dev server with HMR and production bundler |
 | [@monaco-editor/react](https://github.com/suren-atoyan/monaco-react) | 4 | Code editor with YAML syntax highlighting |
 | [js-yaml](https://github.com/nodeca/js-yaml) | 4 | YAML parsing and serialization in the browser |
-| [html2canvas](https://html2canvas.hertzen.com) | 1.4 | Renders the DOM as a canvas image for the PDF |
-| [jsPDF](https://github.com/parallax/jsPDF) | 2.5 | Assembles canvas frames into a PDF file |
+| [SwiftLaTeX](https://github.com/SwiftLaTeX/SwiftLaTeX) | — | pdfTeX compiled to WebAssembly (served from `public/swiftlatex/`) |
+| [pdf.js](https://mozilla.github.io/pdf.js/) (`pdfjs-dist`) | 4 | Renders the compiled PDF in the preview |
 
-No backend. No database. No authentication. No runtime network dependencies.
+No backend. No database. No authentication. The TeX files the templates need are static assets served with the app; the only third-party request is Monaco itself, which `@monaco-editor/react` loads from jsDelivr when the YAML tab is first opened.
 
 ---
 
@@ -685,8 +628,8 @@ Zero onboarding friction. No accounts, no API keys, no latency. For a personal C
 **Why detect entry type by fields instead of section name?**
 Because section names are free-form — someone might write `jobs` instead of `experience`. Field-based detection makes the system robust to naming variations and supports sections in any language.
 
-**Why use the same pagination algorithm in the preview and the PDF?**
-To guarantee that what you see on screen is exactly what gets exported. If the preview shows 2 pages, the PDF has 2 pages with the same break point.
+**Why LaTeX?**
+It gives professional typography and pagination, and it produces a text-based PDF that ATS parsers can read. The preview renders the same compiled PDF that you download, so what you see is exactly what you get. Compiling in the browser with WebAssembly keeps the app serverless.
 
 ---
 

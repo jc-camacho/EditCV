@@ -1,4 +1,0 @@
-node_modules/.bin/vite: line 2: sed: command not found
-node_modules/.bin/vite: line 2: dirname: command not found
-node_modules/.bin/vite: line 4: uname: command not found
-node_modules/.bin/vite: line 15: exec: node: not found

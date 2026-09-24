@@ -1,5 +1,14 @@
 const STORAGE_KEY = 'editcv_cvs'
 const ACTIVE_KEY = 'editcv_active'
+const THEME_KEY = 'editcv_theme'
+
+export const loadTheme = () => localStorage.getItem(THEME_KEY) || 'dark'
+export const saveTheme = theme => localStorage.setItem(THEME_KEY, theme)
+
+/** Editor pane width, as a percentage of the main card. */
+const EDITOR_WIDTH_KEY = 'editcv_editor_width'
+export const loadEditorWidth = () => Number(localStorage.getItem(EDITOR_WIDTH_KEY)) || 50
+export const saveEditorWidth = percent => localStorage.setItem(EDITOR_WIDTH_KEY, percent.toFixed(1))
 
 export function loadCVs() {
   try {

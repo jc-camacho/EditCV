@@ -2,7 +2,8 @@ import yaml from 'js-yaml'
 
 export function parseCV(yamlString) {
   try {
-    const raw = yaml.load(yamlString)
+    // CORE_SCHEMA keeps dates like 2020-01-15 as strings instead of Date objects
+    const raw = yaml.load(yamlString, { schema: yaml.CORE_SCHEMA })
     if (!raw || !raw.cv) throw new Error('YAML must have a root "cv" key')
     return { data: raw.cv, error: null }
   } catch (e) {
@@ -12,7 +13,7 @@ export function parseCV(yamlString) {
 
 // Detects entry type by its fields
 export function detectEntryType(entry) {
-  if (!entry || typeof entry !== 'object') return 'bullet'
+  if (!entry || typeof entry !== 'object') return 'text'
   if ('institution' in entry) return 'education'
   if ('company' in entry) return 'experience'
   if ('title' in entry && 'authors' in entry) return 'publication'
@@ -21,8 +22,7 @@ export function detectEntryType(entry) {
   if ('bullet' in entry) return 'bullet'
   if ('reversed_number' in entry) return 'numbered'
   if ('number' in entry) return 'numbered'
-  if ('summary' in entry && !('bullet' in entry) && !('institution' in entry) && !('company' in entry) && !('name' in entry)) return 'summary'
-  if (typeof entry === 'string') return 'text'
+  if ('summary' in entry && !('name' in entry)) return 'summary'
   return 'text'
 }
 
@@ -57,7 +57,7 @@ export function formatDateRange(startDate, endDate, date, dateFormat = 'month-ye
   const parse = dateFormat === 'year' ? parseYear : parseMonthYear
   const start = startDate ? parse(startDate) : ''
   const end = endDate
-    ? endDate === 'present' ? 'Present' : parse(endDate)
+    ? String(endDate).toLowerCase() === 'present' ? 'Present' : parse(endDate)
     : ''
   if (start && end) return `${start} – ${end}`
   if (start) return start

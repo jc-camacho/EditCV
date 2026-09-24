@@ -1,176 +1,179 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { ThemeProvider } from './context/ThemeContext'
-import { TemplateProvider, useTemplate } from './context/TemplateContext'
-import { TEMPLATES } from './templates/index'
-import Navbar from './components/Navbar/Navbar'
-import Sidebar from './components/Sidebar/Sidebar'
-import Editor from './components/Editor/Editor'
-import CVPreview from './components/CVPreview/CVPreview'
-import ExportModal from './components/ExportModal/ExportModal'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import Navbar from './components/Navbar'
+import Sidebar from './components/Sidebar'
+import Editor from './components/Editor'
+import PdfPreview from './components/PdfPreview'
+import ExportModal from './components/ExportModal'
+import Splitter from './components/Splitter'
+import { TEMPLATES, DEFAULT_TEMPLATE } from './latex/templates'
+import { useLatexPdf } from './latex/useLatexPdf'
 import { parseCV } from './utils/yamlParser'
-import { loadCVs, saveCV, createCV, getActiveId, setActiveId } from './utils/storage'
-import { exportToPDF } from './utils/pdfExport.jsx'
+import { loadCVs, saveCV, createCV, getActiveId, setActiveId, loadTheme, saveTheme, loadEditorWidth, saveEditorWidth } from './utils/storage'
+
+const AUTOSAVE_DELAY_MS = 600
+const PAGE_WIDTH_PX     = 816 // US Letter at 96dpi
+const MIN_ZOOM = 25
+const MAX_ZOOM = 250
+const MIN_PANE_PX = 280
+
+const clampZoom = zoom => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom))
+
+/** Triggers a browser download for in-memory content. */
+function downloadFile(content, filename, mimeType) {
+  const url  = URL.createObjectURL(new Blob([content], { type: mimeType }))
+  const link = document.createElement('a')
+  link.href     = url
+  link.download = filename
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
 
 /**
- * AppInner is the real application shell. It lives inside ThemeProvider and
- * TemplateProvider so it can consume both contexts via their hooks.
- *
  * State flow:
  *   user edits YAML / form
- *     → yamlText changes
- *     → parsedCV is recomputed
- *     → CVPreview re-renders
+ *     → yamlText changes → parsed CV is recomputed
+ *     → LaTeX is regenerated and compiled (debounced) → PdfPreview re-renders
  *     → auto-save fires after 600 ms of inactivity
  */
-function AppInner() {
-  const [cvs, setCVs]             = useState([])          // Full list of CVs stored in localStorage
-  const [activeCVId, setActiveCVId] = useState(null)      // ID of the CV currently open in the editor
-  const [yamlText, setYamlText]   = useState('')           // Raw YAML string in the editor
-  const [parsedCV, setParsedCV]   = useState(null)         // Parsed CV data object (null when YAML is invalid)
-  const [parseError, setParseError] = useState(null)       // YAML parse error message, if any
-  const [exporting, setExporting] = useState(false)        // True while PDF export is in progress
-  const [zoom, setZoom]           = useState(100)          // Preview zoom level (25–200)
-  const [showExportModal, setShowExportModal] = useState(false) // Filename prompt before export
+export default function App() {
+  const [theme, setTheme]           = useState(loadTheme)
+  const [template, setTemplate]     = useState(DEFAULT_TEMPLATE)
+  const [cvs, setCVs]               = useState([])   // Every CV stored in localStorage
+  const [activeCVId, setActiveCVId] = useState(null)
+  const [yamlText, setYamlText]     = useState('')
+  const [zoom, setZoom]             = useState(100)
+  const [editorWidth, setEditorWidth] = useState(loadEditorWidth) // % of the main card
+  const [showExportModal, setShowExportModal] = useState(false)
 
-  const saveTimerRef    = useRef(null)      // Holds the debounce timer ID for auto-save
-  const previewPaneRef  = useRef(null)      // Ref to the preview pane DOM element for ResizeObserver
+  const saveTimerRef   = useRef(null)
+  const pendingSaveRef = useRef(null) // { id, yaml } not yet written to localStorage
+  const activeCVIdRef  = useRef(null) // Always-current active ID for editor callbacks
+  const previewPaneRef = useRef(null)
 
-  const { template, setTemplate } = useTemplate()
+  const { data: parsedCV, error: parseError } = useMemo(() => parseCV(yamlText), [yamlText])
+  const latex = useLatexPdf(parsedCV, template)
 
-  // ── Responsive zoom: fit the page to the available pane width ────────────
+  useEffect(() => saveEditorWidth(editorWidth), [editorWidth])
+
+  // Keeps both panes at least MIN_PANE_PX wide
+  function resizeEditor(percent, totalWidth) {
+    const min = Math.min(50, (MIN_PANE_PX / totalWidth) * 100)
+    setEditorWidth(Math.max(min, Math.min(100 - min, percent)))
+  }
+
   useEffect(() => {
-    const paneEl = previewPaneRef.current
-    if (!paneEl) return
+    document.documentElement.dataset.theme = theme
+    saveTheme(theme)
+  }, [theme])
 
-    const observer = new ResizeObserver(() => {
-      // 816px is the fixed width of a US Letter page at 96dpi
-      const availableWidth = paneEl.clientWidth - 48 // subtract 24px padding on each side
-      const fittedZoom     = Math.round((availableWidth / 816) * 100)
-      setZoom(Math.max(25, Math.min(200, fittedZoom)))
-    })
+  // Zoom that makes the page fill the preview pane's width
+  function fitToWidth() {
+    const availableWidth = previewPaneRef.current.clientWidth - 48 // 24px padding on each side
+    setZoom(clampZoom(Math.round((availableWidth / PAGE_WIDTH_PX) * 100)))
+  }
 
-    observer.observe(paneEl)
+  useEffect(() => {
+    const observer = new ResizeObserver(fitToWidth)
+    observer.observe(previewPaneRef.current)
     return () => observer.disconnect()
   }, [])
 
-  // ── Bootstrap: load CVs from localStorage on first render ────────────────
+  // Load CVs on first render, creating one so the editor is never empty
   useEffect(() => {
     let storedCVs = loadCVs()
-
-    // If there are no saved CVs yet, create a default one so the editor is never empty
     if (storedCVs.length === 0) {
       const defaultCV = createCV('My CV')
       saveCV(defaultCV)
       storedCVs = [defaultCV]
     }
-
     setCVs(storedCVs)
 
-    // Restore the last active CV, falling back to the first one
     const lastActiveId = getActiveId()
-    const activeCV     = storedCVs.find(c => c.id === lastActiveId)
-      || storedCVs.find(c => !c.archived)
-      || storedCVs[0]
-    setActiveCVId(activeCV.id)
-    setActiveId(activeCV.id)
-    setYamlText(activeCV.yaml)
+    openCV(storedCVs.find(c => c.id === lastActiveId) || storedCVs.find(c => !c.archived) || storedCVs[0])
   }, [])
 
-  // ── Live parse: re-parse YAML on every keystroke ──────────────────────────
-  useEffect(() => {
-    const { data, error } = parseCV(yamlText)
-    setParsedCV(data)
-    setParseError(error)
-  }, [yamlText])
-
-  // ── Auto-save: debounce saves so we don't hammer localStorage ────────────
-  useEffect(() => {
-    if (!activeCVId || !yamlText) return
-
+  // Writes the pending YAML into the *current* stored copy of the CV, so
+  // renames/archives made from the sidebar in the meantime are preserved.
+  function flushPendingSave() {
     clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      const currentCV = cvs.find(c => c.id === activeCVId)
-      if (currentCV) {
-        const updatedCV = { ...currentCV, yaml: yamlText, updatedAt: new Date().toISOString() }
-        saveCV(updatedCV)
-        setCVs(loadCVs()) // Refresh the sidebar list after saving
-      }
-    }, 600)
+    const pending = pendingSaveRef.current
+    if (!pending) return
+    pendingSaveRef.current = null
 
-    return () => clearTimeout(saveTimerRef.current)
-  }, [yamlText, activeCVId])
+    const storedCV = loadCVs().find(c => c.id === pending.id)
+    if (storedCV) {
+      saveCV({ ...storedCV, yaml: pending.yaml, updatedAt: new Date().toISOString() })
+      setCVs(loadCVs())
+    }
+  }
 
-  function handleSelectCV(id) {
-    const cv = cvs.find(c => c.id === id)
-    if (!cv) return
-    setActiveCVId(id)
-    setActiveId(id)
+  // Don't lose the last keystrokes when the tab is closed within the debounce window
+  useEffect(() => {
+    window.addEventListener('pagehide', flushPendingSave)
+    return () => window.removeEventListener('pagehide', flushPendingSave)
+  }, [])
+
+  function handleYamlChange(newYaml) {
+    setYamlText(newYaml)
+    if (!activeCVIdRef.current) return
+    pendingSaveRef.current = { id: activeCVIdRef.current, yaml: newYaml }
+    clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(flushPendingSave, AUTOSAVE_DELAY_MS)
+  }
+
+  function openCV(cv) {
+    activeCVIdRef.current = cv.id
+    setActiveCVId(cv.id)
+    setActiveId(cv.id)
     setYamlText(cv.yaml)
   }
 
-  // Called by Sidebar after any create/delete/rename operation
-  function handleCVsChange() {
-    setCVs(loadCVs())
+  function handleSelectCV(id) {
+    // Save the CV we're leaving first, then read from storage rather than
+    // state so CVs created a moment ago (not yet in `cvs`) can be opened too
+    flushPendingSave()
+    const cv = loadCVs().find(c => c.id === id)
+    if (cv) openCV(cv)
   }
-
-  const handleExport = useCallback(async (chosenName) => {
-    if (!parsedCV || exporting) return
-    setExporting(true)
-    try {
-      const filename = `${chosenName || parsedCV?.name || 'cv'}.pdf`
-      await exportToPDF(parsedCV, filename, template)
-    } finally {
-      setExporting(false)
-    }
-  }, [parsedCV, exporting, template])
 
   function handleConfirmExport(chosenName) {
     setShowExportModal(false)
-    handleExport(chosenName)
+    if (latex.pdf) downloadFile(latex.pdf, `${chosenName}.pdf`, 'application/pdf')
   }
+
+  // The PDF on screen must match the current YAML before it can be downloaded
+  const pdfIsCurrent = latex.status === 'ready' && !parseError && !!parsedCV
 
   return (
     <div className="app">
-      <Navbar />
+      <Navbar theme={theme} onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
       <div className="body">
-        <Sidebar
-          cvs={cvs}
-          activeCVId={activeCVId}
-          onSelect={handleSelectCV}
-          onCVsChange={handleCVsChange}
-        />
-        <div className="mainCard">
-          <div className="editorPane">
-            <Editor value={yamlText} onChange={setYamlText} error={parseError} parsedCV={parsedCV} />
+        <Sidebar cvs={cvs} activeCVId={activeCVId} onSelect={handleSelectCV} onCVsChange={() => setCVs(loadCVs())} />
+        <div className="card mainCard">
+          <div className="pane" style={{ flex: `0 0 ${editorWidth}%` }}>
+            <Editor value={yamlText} onChange={handleYamlChange} error={parseError} parsedCV={parsedCV} theme={theme} />
           </div>
-          <div className="previewPane" ref={previewPaneRef}>
-            <div className="previewToolbar">
-              <span className="previewLabel">Preview — US Letter</span>
-              <div className="zoomControls">
-                <button className="zoomBtn" onClick={() => setZoom(z => Math.max(25, z - 10))}  title="Zoom out">−</button>
+          <Splitter value={editorWidth} onResize={resizeEditor} />
+          <div className="pane preview" ref={previewPaneRef}>
+            <div className="paneHeader">
+              <span className="paneLabel">
+                Preview — US Letter
+                {latex.status === 'compiling' && <span className="compileStatus"> · compiling…</span>}
+              </span>
+              <div className="toolbarGroup">
+                <button className="btnIcon filled" onClick={() => setZoom(z => clampZoom(z - 10))} title="Zoom out">−</button>
                 <span className="zoomLabel">{zoom}%</span>
-                <button className="zoomBtn" onClick={() => setZoom(z => Math.min(200, z + 10))} title="Zoom in">+</button>
-                <button className="zoomBtn zoomReset" onClick={() => setZoom(100)} title="Reset zoom">⊙</button>
+                <button className="btnIcon filled" onClick={() => setZoom(z => clampZoom(z + 10))} title="Zoom in">+</button>
+                <button className="btnIcon filled" onClick={fitToWidth} title="Fit to width">⊙</button>
               </div>
-              <select
-                className="templateSelect"
-                value={template}
-                onChange={e => setTemplate(e.target.value)}
-                title="Template"
-              >
-                {Object.values(TEMPLATES).map(t => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
+              <select className="templateSelect" value={template} onChange={e => setTemplate(e.target.value)} title="Template">
+                {Object.values(TEMPLATES).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              <button
-                className="exportBtn"
-                onClick={() => setShowExportModal(true)}
-                disabled={exporting || !!parseError || !parsedCV}
-              >
-                {exporting ? 'Exporting...' : '⬇ Download PDF'}
+              <button className="btn btnPrimary" onClick={() => setShowExportModal(true)} disabled={!pdfIsCurrent}>
+                ⬇ Download PDF
               </button>
             </div>
-            <CVPreview cvData={parsedCV} zoom={zoom} />
+            <PdfPreview pdf={latex.pdf} zoom={zoom} status={latex.status} error={latex.error} />
           </div>
         </div>
       </div>
@@ -182,15 +185,5 @@ function AppInner() {
         />
       )}
     </div>
-  )
-}
-
-export default function App() {
-  return (
-    <ThemeProvider>
-      <TemplateProvider>
-        <AppInner />
-      </TemplateProvider>
-    </ThemeProvider>
   )
 }

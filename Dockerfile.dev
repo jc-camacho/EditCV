@@ -1,5 +1,8 @@
 FROM node:20-alpine
 
+# Alpine only ships busybox sh; Claude Code needs bash to run commands
+RUN apk add --no-cache bash git
+
 WORKDIR /app
 
 COPY package*.json ./

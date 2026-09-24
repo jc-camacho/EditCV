@@ -1,25 +1,22 @@
 {
   "name": "editcv",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:texlive": "node scripts/build-texlive-bundle.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@react-pdf/renderer": "^4.3.0",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.2",
     "js-yaml": "^4.1.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.2"
   }
