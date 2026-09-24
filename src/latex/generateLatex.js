@@ -1,6 +1,7 @@
 import { detectEntryType, formatDateRange, formatSectionTitle } from '../utils/yamlParser'
 import { TEMPLATES, DEFAULT_TEMPLATE } from './templates'
 import { escapeLatex, latexLink, mdToLatex } from './escape'
+import { resolveLanguage } from '../utils/languages'
 
 /**
  * Turns the parsed CV object into a complete, self-contained .tex document.
@@ -11,7 +12,8 @@ import { escapeLatex, latexLink, mdToLatex } from './escape'
  */
 export function generateLatex(cv, templateId = DEFAULT_TEMPLATE) {
   const template = TEMPLATES[templateId] ?? TEMPLATES[DEFAULT_TEMPLATE]
-  const context  = { dateFormat: template.dateFormat }
+  const language = resolveLanguage(cv?.lang)
+  const context  = { dateFormat: template.dateFormat, language }
 
   const sections = Object.entries(cv?.sections || {})
     .map(([title, entries]) => renderSection(title, entries, context))
@@ -21,9 +23,10 @@ export function generateLatex(cv, templateId = DEFAULT_TEMPLATE) {
 
   return [
     template.preamble,
-    `\\hypersetup{pdftitle={${name}},pdfauthor={${name}}}`,
+    `\\hypersetup{pdftitle={${name}},pdfauthor={${name}},pdflang={${language.pdfLang}}}`,
     '',
     '\\begin{document}',
+    hyphenation(language),
     '',
     renderHeader(cv || {}),
     '',
@@ -32,6 +35,16 @@ export function generateLatex(cv, templateId = DEFAULT_TEMPLATE) {
     '\\end{document}',
     '',
   ].join('\n')
+}
+
+/**
+ * Switches pdfTeX to the language's hyphenation patterns. Guarded, so the .tex
+ * still compiles (with the default patterns) on a TeX without them.
+ */
+function hyphenation({ hyphenation: h }) {
+  if (!h) return ''
+  return `\\ifcsname l@${h.patterns}\\endcsname\\language=\\csname l@${h.patterns}\\endcsname\\fi` +
+    `\\lefthyphenmin=${h.leftMin} \\righthyphenmin=${h.rightMin}`
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
@@ -107,8 +120,8 @@ function renderSection(title, entries, context) {
   return [macro('cvsection', escapeLatex(formatSectionTitle(title))), ...blocks].join('\n')
 }
 
-function renderEntry(entry, type, { dateFormat }) {
-  const date = formatDateRange(entry?.start_date, entry?.end_date, entry?.date, dateFormat)
+function renderEntry(entry, type, { dateFormat, language }) {
+  const date = formatDateRange(entry?.start_date, entry?.end_date, entry?.date, dateFormat, language)
 
   switch (type) {
     case 'education':
@@ -159,7 +172,7 @@ function renderEntry(entry, type, { dateFormat }) {
         : ''
       return macro('cvpublication',
         title,
-        escapeLatex(formatDateRange(entry.date, null, null, dateFormat)),
+        escapeLatex(formatDateRange(entry.date, null, null, dateFormat, language)),
         authors,
         doi,
         mdToLatex(entry.journal),

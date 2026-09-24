@@ -1,0 +1,13 @@
+% Hyphenation patterns baked into the pdfLaTeX format by
+% scripts/build-texlive-bundle.mjs. It replaces TeX Live's language.dat so the
+% format only carries the languages EditCV offers (src/utils/languages.js):
+% each pattern set adds to the format every visitor downloads.
+%
+% english must stay first (\language0) and use Knuth's hyphen.tex.
+english hyphen.tex
+=usenglish
+=USenglish
+=american
+nohyphenation zerohyph.tex
+spanish loadhyph-es.tex
+=espanol

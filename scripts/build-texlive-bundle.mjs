@@ -5,19 +5,21 @@
  *   node scripts/build-texlive-bundle.mjs
  *
  * Requires a local TeX Live (kpsewhich) as the source of the files. Missing
- * packages can be dropped into scripts/texlive-extra/.
+ * packages can be dropped into scripts/texlive-extra/, which also holds the
+ * language.dat that picks the hyphenation patterns built into the format.
  *
  * Steps:
  *   1. Build pdflatex.fmt with the WASM engine itself (a format is only valid
  *      for the exact pdfTeX binary that produced it).
  *   2. Compile a sample CV and a character-coverage document with every
  *      template, recording each file pdfTeX asks for.
- *   3. Pack those files into public/swiftlatex/pdftex/bundle.gz and write
+ *   3. Pack those files into public/swiftlatex/pdftex/bundle.<hash>.gz and write
  *      manifest.json (offsets + the list of files the worker may request).
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'vite'
 import { createEngine } from './swiftlatex-node.mjs'
@@ -25,7 +27,6 @@ import { createEngine } from './swiftlatex-node.mjs'
 const ROOT      = path.resolve(new URL('..', import.meta.url).pathname)
 const EXTRA_DIR = path.join(ROOT, 'scripts/texlive-extra')
 const OUT_DIR   = path.join(ROOT, 'public/swiftlatex/pdftex')
-const BUNDLE_FILE = 'bundle.gz'
 
 // kpathsea format ids (as sent by the worker) → default file extension
 const FORMAT_EXT = { 3: '.tfm', 10: '.fmt', 11: '.map', 32: '.pfb', 33: '.vf', 44: '.enc' }
@@ -106,6 +107,10 @@ function assertCompiled(label, result) {
 const { generateLatex, escapeLatex, parseCV, createCV, TEMPLATES } = await loadGenerator()
 const sampleCV = parseCV(createCV('Mario Mendoza').yaml).data
 
+// The Spanish CV must actually get Spanish hyphenation, not silently fall back to English
+const requireSpanishPatterns = tex => tex.replace('\\begin{document}',
+  '\\begin{document}\\ifcsname l@spanish\\endcsname\\else\\errmessage{Spanish hyphenation patterns missing from the format}\\fi')
+
 console.log('Building pdflatex.fmt with the WASM engine…')
 const formatEngine = await createEngine({ resolveFile })
 const format = await formatEngine.compileFormat()
@@ -115,6 +120,7 @@ used.clear() // the format's own inputs are baked into it
 
 const documents = Object.keys(TEMPLATES).flatMap(templateId => [
   [`${templateId}: sample CV`, generateLatex(sampleCV, templateId)],
+  [`${templateId}: sample CV (es)`, requireSpanishPatterns(generateLatex({ ...sampleCV, lang: 'es' }, templateId))],
   [`${templateId}: character coverage`, coverageDocument(TEMPLATES[templateId].preamble, escapeLatex)],
 ])
 
@@ -138,6 +144,9 @@ for (const [key, source] of [...used].sort(([a], [b]) => a.localeCompare(b))) {
   offset += data.length
 }
 const bundle = zlib.gzipSync(Buffer.concat(chunks), { level: 9 })
+// Content hash in the name: the archive can be cached forever (vercel.json),
+// and a new build can never be read with an old manifest's offsets
+const BUNDLE_FILE = `bundle.${crypto.createHash('sha256').update(bundle).digest('hex').slice(0, 10)}.gz`
 
 fs.rmSync(OUT_DIR, { recursive: true, force: true })
 fs.mkdirSync(OUT_DIR, { recursive: true })

@@ -51,6 +51,7 @@ export function setActiveId(id) {
 
 function defaultYaml(name) {
   return `cv:
+  lang: en  # en | es — date labels and hyphenation
   name: "${name}"
   headline: Software Engineer & Machine Learning Researcher
   location: Santa Cruz de la Sierra, Bolivia

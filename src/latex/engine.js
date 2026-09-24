@@ -10,11 +10,13 @@
  * PdfTeXEngine.js) so the worker URL is under our control.
  *
  * Every TeX file the templates need (format, packages, fonts) is packed into
- * public/swiftlatex/pdftex/bundle.gz by scripts/build-texlive-bundle.mjs, so
+ * public/swiftlatex/pdftex/bundle.<hash>.gz by scripts/build-texlive-bundle.mjs, so
  * nothing is requested from outside the app's own origin. The whole archive is
  * downloaded once, in parallel with the engine, and handed to the worker before
  * the first compile: left alone, the worker would fetch each file with its own
- * synchronous request, one round trip after another. The worker is also patched
+ * synchronous request, one round trip after another. index.html preloads the
+ * manifest and the archive (see vite.config.js), so the download starts with
+ * the page instead of after React mounts; plain fetch() calls reuse them. The worker is also patched
  * to only request files listed in the manifest (see public/swiftlatex/README.md).
  */
 

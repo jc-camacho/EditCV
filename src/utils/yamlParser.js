@@ -1,4 +1,5 @@
 import yaml from 'js-yaml'
+import { LANGUAGES, DEFAULT_LANGUAGE, isPresent } from './languages'
 
 export function parseCV(yamlString) {
   try {
@@ -37,12 +38,10 @@ export function formatSectionTitle(snakeKey) {
     .join(' ')
 }
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function parseMonthYear(str) {
+function parseMonthYear(str, language) {
   const parts = String(str).split('-')
   if (parts.length >= 2) {
-    const month = MONTHS[parseInt(parts[1], 10) - 1]
+    const month = language.months[parseInt(parts[1], 10) - 1]
     return month ? `${month} ${parts[0]}` : parts[0]
   }
   return String(str)
@@ -52,12 +51,12 @@ function parseYear(str) {
   return String(str).split('-')[0]
 }
 
-export function formatDateRange(startDate, endDate, date, dateFormat = 'month-year') {
+export function formatDateRange(startDate, endDate, date, dateFormat = 'month-year', language = LANGUAGES[DEFAULT_LANGUAGE]) {
   if (date) return String(date)
-  const parse = dateFormat === 'year' ? parseYear : parseMonthYear
+  const parse = dateFormat === 'year' ? parseYear : str => parseMonthYear(str, language)
   const start = startDate ? parse(startDate) : ''
   const end = endDate
-    ? String(endDate).toLowerCase() === 'present' ? 'Present' : parse(endDate)
+    ? isPresent(endDate) ? language.present : parse(endDate)
     : ''
   if (start && end) return `${start} – ${end}`
   if (start) return start

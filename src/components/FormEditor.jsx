@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import yaml from 'js-yaml'
 import { formatSectionTitle } from '../utils/yamlParser'
+import { LANGUAGES, languageKey } from '../utils/languages'
 import Modal from './Modal'
 
 // ── Entry types ───────────────────────────────────────────────────────────────
@@ -400,7 +401,14 @@ export default function FormEditor({ cvData, onYamlChange }) {
     <div className="form">
       <div className="formGroup">
         <div className="groupTitle">Personal Info</div>
-        <TextField label="Full Name" value={formData.name}     onChange={v => setField('name', v)}     placeholder="Your Name" />
+        <div className="row2">
+          <TextField label="Full Name" value={formData.name} onChange={v => setField('name', v)} placeholder="Your Name" />
+          <Field label="CV Language">
+            <select className="input" value={languageKey(formData.lang)} onChange={e => setField('lang', e.target.value)}>
+              {Object.entries(LANGUAGES).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </Field>
+        </div>
         <TextField label="Headline"  value={formData.headline} onChange={v => setField('headline', v)} placeholder="Software Engineer & Researcher" />
         <div className="row2">
           <TextField label="Location" value={formData.location} onChange={v => setField('location', v)} placeholder="City, Country" />
