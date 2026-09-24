@@ -12,8 +12,8 @@
  *      for the exact pdfTeX binary that produced it).
  *   2. Compile a sample CV and a character-coverage document with every
  *      template, recording each file pdfTeX asks for.
- *   3. Copy those files to public/swiftlatex/pdftex/<format>/<name> and write
- *      manifest.json, so the worker never requests a file that isn't there.
+ *   3. Pack those files into public/swiftlatex/pdftex/bundle.gz and write
+ *      manifest.json (offsets + the list of files the worker may request).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -25,6 +25,7 @@ import { createEngine } from './swiftlatex-node.mjs'
 const ROOT      = path.resolve(new URL('..', import.meta.url).pathname)
 const EXTRA_DIR = path.join(ROOT, 'scripts/texlive-extra')
 const OUT_DIR   = path.join(ROOT, 'public/swiftlatex/pdftex')
+const BUNDLE_FILE = 'bundle.gz'
 
 // kpathsea format ids (as sent by the worker) → default file extension
 const FORMAT_EXT = { 3: '.tfm', 10: '.fmt', 11: '.map', 32: '.pfb', 33: '.vf', 44: '.enc' }
@@ -124,33 +125,33 @@ for (const [label, source] of documents) {
   assertCompiled(label, await engine.compile(source))
 }
 
-// The format is by far the largest file: ship it gzipped and let the browser inflate it
-const FORMAT_KEY = [...used.keys()].find(key => key.startsWith('10/'))
-const preload = { [FORMAT_KEY]: FORMAT_KEY + '.gz' }
+// Everything goes into a single gzipped archive: the worker would otherwise
+// fetch each file with its own synchronous request during the first compile,
+// one round trip after another. The manifest records where each file starts.
+const entries = []
+const chunks  = []
+let offset = 0
+for (const [key, source] of [...used].sort(([a], [b]) => a.localeCompare(b))) {
+  const data = Buffer.isBuffer(source) ? source : fs.readFileSync(source)
+  entries.push([key, offset, data.length])
+  chunks.push(data)
+  offset += data.length
+}
+const bundle = zlib.gzipSync(Buffer.concat(chunks), { level: 9 })
 
 fs.rmSync(OUT_DIR, { recursive: true, force: true })
-let total = 0
-for (const [key, source] of used) {
-  const data = key === FORMAT_KEY ? zlib.gzipSync(source, { level: 9 }) : fs.readFileSync(source)
-  const target = path.join(OUT_DIR, preload[key] ?? key)
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.writeFileSync(target, data)
-  total += data.length
-}
-const files = [...used.keys()].filter(key => key !== FORMAT_KEY).sort()
-fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify({ preload, files }, null, 1) + '\n')
-console.log(`Wrote ${used.size} files (${(total / 1048576).toFixed(1)} MB) to public/swiftlatex/pdftex/`)
+fs.mkdirSync(OUT_DIR, { recursive: true })
+fs.writeFileSync(path.join(OUT_DIR, BUNDLE_FILE), bundle)
+const files = entries.map(([key]) => key)
+fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify({ bundle: BUNDLE_FILE, entries, files }, null, 1) + '\n')
+console.log(`Packed ${used.size} files (${(offset / 1048576).toFixed(1)} MB, ${(bundle.length / 1048576).toFixed(1)} MB gzipped) into public/swiftlatex/pdftex/${BUNDLE_FILE}`)
 
-// Same protocol as src/latex/engine.js: manifest-restricted, no server headers
+// Same protocol as src/latex/engine.js: every file preloaded from the archive,
+// and any request the worker still makes fails, proving the bundle is complete
 console.log('Verifying the bundle on its own…')
-const fromBundle = url => {
-  const target = path.join(OUT_DIR, url.match(/pdftex\/(.+)$/)[1])
-  return fs.existsSync(target) ? { data: fs.readFileSync(target) } : null
-}
+const unpacked = zlib.gunzipSync(fs.readFileSync(path.join(OUT_DIR, BUNDLE_FILE)))
 for (const [label, source] of documents) {
-  const engine = await createEngine({ resolveFile: fromBundle, files })
-  for (const [key, file] of Object.entries(preload)) {
-    engine.addTexFile(key, zlib.gunzipSync(fs.readFileSync(path.join(OUT_DIR, file))))
-  }
+  const engine = await createEngine({ resolveFile: () => null, files })
+  for (const [key, start, length] of entries) engine.addTexFile(key, unpacked.subarray(start, start + length))
   assertCompiled(label, await engine.compile(source))
 }

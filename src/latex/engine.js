@@ -9,10 +9,13 @@
  * We talk to the worker directly (same message protocol as SwiftLaTeX's
  * PdfTeXEngine.js) so the worker URL is under our control.
  *
- * Every TeX file the templates need (format, packages, fonts) is bundled in
- * public/swiftlatex/pdftex/ by scripts/build-texlive-bundle.mjs, so nothing is
- * requested from outside the app's own origin. The worker is patched to only
- * request files listed in the bundle's manifest (see public/swiftlatex/README.md).
+ * Every TeX file the templates need (format, packages, fonts) is packed into
+ * public/swiftlatex/pdftex/bundle.gz by scripts/build-texlive-bundle.mjs, so
+ * nothing is requested from outside the app's own origin. The whole archive is
+ * downloaded once, in parallel with the engine, and handed to the worker before
+ * the first compile: left alone, the worker would fetch each file with its own
+ * synchronous request, one round trip after another. The worker is also patched
+ * to only request files listed in the manifest (see public/swiftlatex/README.md).
  */
 
 const ENGINE_DIR = `${import.meta.env.BASE_URL}swiftlatex/`
@@ -37,14 +40,15 @@ async function inflate(response) {
   return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
 }
 
-/** The manifest plus the preloaded files (the format), ready to hand to the worker. */
+/** The manifest plus every file in the archive, ready to hand to the worker. */
 async function loadBundle() {
   const manifest = await (await fetchBundleFile('manifest.json')).json()
-  const preload  = await Promise.all(Object.entries(manifest.preload).map(async ([key, file]) => ({
+  const archive  = await inflate(await fetchBundleFile(manifest.bundle))
+  const preload  = manifest.entries.map(([key, offset, length]) => ({
     key,
     name: key.split('/').pop(),
-    src:  await inflate(await fetchBundleFile(file)),
-  })))
+    src:  archive.slice(offset, offset + length), // own buffer, so it can be transferred
+  }))
   return { files: manifest.files, preload }
 }
 
