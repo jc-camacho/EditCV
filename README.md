@@ -279,6 +279,8 @@ The document must have a root `cv:` key. All fields are optional except `name`.
 
 ```yaml
 cv:
+  lang: es                      # en (default) | es — date labels and hyphenation
+
   # ── Personal info ──────────────────────────────────────────
   name: "Your Full Name"
   headline: "Your professional title"
@@ -363,6 +365,17 @@ cv:
       - bullet: "Keynote — LatamConf 2023, Bogotá"
       - bullet: "NLP Workshop — UAGRM 2022"
 ```
+
+### Language
+
+`lang` sets the language the CV is written in (also selectable as **CV Language** in the form):
+
+| `lang` | Dates | Hyphenation |
+|---|---|---|
+| `en` (default) | Jan 2022 – Present | US English |
+| `es` (Latin American Spanish) | Ene 2022 – Actualidad | Spanish |
+
+Everything you type is printed as written; section titles come from your section keys, so name them in the CV's language (`experiencia`, `educacion`…). `end_date` accepts `present`, `presente` or `actualidad`.
 
 ---
 
