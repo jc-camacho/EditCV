@@ -37,6 +37,13 @@ let queue        = Promise.resolve() // pdfTeX can only run one compilation at a
  *   { phase: 'prepare' }                  unpacking the bundle, booting the worker
  *   null                                  not loading (ready, or not started)
  */
+/** Logs how long a start-up or compile step took, to diagnose slow loads from the console. */
+export function logTiming(step, start) {
+  console.info(`[EditCV] ${step}: ${Math.round(performance.now() - start)} ms (at ${Math.round(performance.now())} ms)`)
+}
+
+const PROGRESS_INTERVAL_MS = 100
+
 let loadProgress = null
 const progressListeners = new Set()
 
@@ -66,14 +73,20 @@ async function download(response) {
   const reader = response.body.getReader()
   const chunks = []
   let loaded   = 0
+  let reported = performance.now()
   reportProgress({ phase: 'download', loaded, total })
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
     chunks.push(value)
     loaded += value.length
-    reportProgress({ phase: 'download', loaded, total })
+    // Every report re-renders the app: a few per second is plenty for a progress bar
+    if (performance.now() - reported > PROGRESS_INTERVAL_MS) {
+      reported = performance.now()
+      reportProgress({ phase: 'download', loaded, total })
+    }
   }
+  reportProgress({ phase: 'download', loaded, total })
   const data = new Uint8Array(loaded)
   let offset = 0
   for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length }
@@ -88,15 +101,21 @@ async function inflate(data) {
 
 /** The manifest plus every file in the archive, ready to hand to the worker. */
 async function loadBundle() {
+  let start = performance.now()
   const manifest = await (await fetchBundleFile('manifest.json')).json()
+  logTiming('manifest', start)
+  start = performance.now()
   const packed   = await download(await fetchBundleFile(manifest.bundle))
+  logTiming(`bundle download (${(packed.length / 1048576).toFixed(1)} MB)`, start)
   reportProgress({ phase: 'prepare' })
+  start = performance.now()
   const archive  = await inflate(packed)
   const preload  = manifest.entries.map(([key, offset, length]) => ({
     key,
     name: key.split('/').pop(),
     src:  archive.slice(offset, offset + length), // own buffer, so it can be transferred
   }))
+  logTiming('bundle unpack', start)
   return { files: manifest.files, preload }
 }
 
@@ -104,10 +123,11 @@ function startEngine() {
   if (readyPromise) return readyPromise
 
   const bundle = loadBundle()
+  const bootStart = performance.now()
   const booted = new Promise((resolve, reject) => {
     worker = new Worker(ENGINE_URL)
     worker.onmessage = event => {
-      if (event.data?.result === 'ok') resolve()
+      if (event.data?.result === 'ok') { logTiming('worker boot (wasm)', bootStart); resolve() }
       else reject(new Error('The LaTeX engine failed to initialise.'))
     }
     worker.onerror = () => reject(new Error(
@@ -125,6 +145,7 @@ function startEngine() {
       worker.postMessage({ cmd: 'settexlivefiles', files })
       for (const file of preload) worker.postMessage({ cmd: 'addtexfile', ...file }, [file.src])
       reportProgress(null)
+      logTiming('engine ready', bootStart)
     })
     .catch(error => {
       reportProgress(null)
@@ -140,11 +161,13 @@ function startEngine() {
 
 async function runCompilation(source) {
   await startEngine()
+  const start = performance.now()
 
   return new Promise((resolve, reject) => {
     worker.onmessage = event => {
       const data = event.data
       if (data?.cmd !== 'compile') return // e.g. the 'writefile' acknowledgement
+      logTiming('compile', start)
       worker.onmessage = null
       worker.onerror   = null
       resolve({

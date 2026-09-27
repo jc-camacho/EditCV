@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { logTiming } from '../latex/engine'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -33,6 +34,7 @@ function PdfPage({ doc, pageNumber, zoom }) {
     let cancelled  = false
     let renderTask = null
 
+    const start = performance.now()
     doc.getPage(pageNumber).then(page => {
       if (cancelled) return
       // Render straight at device-pixel resolution, then size the element so that
@@ -58,6 +60,7 @@ function PdfPage({ doc, pageNumber, zoom }) {
         canvas.style.width  = `${offscreen.width / scale}px`
         canvas.style.height = `${offscreen.height / scale}px`
         canvas.getContext('2d').drawImage(offscreen, 0, 0)
+        logTiming(`render page ${pageNumber}`, start)
       })
     }).catch(() => { /* cancelled or document replaced */ })
 
