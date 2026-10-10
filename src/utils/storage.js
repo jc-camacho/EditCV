@@ -1,37 +1,47 @@
-const STORAGE_KEY = 'editcv_cvs'
-const ACTIVE_KEY = 'editcv_active'
-const THEME_KEY = 'editcv_theme'
+/** Everything EditCV keeps in localStorage. */
+const KEYS = {
+  cvs:         'editcv_cvs',
+  activeId:    'editcv_active',
+  theme:       'editcv_theme',
+  editorWidth: 'editcv_editor_width', // editor pane width, as a percentage of the main card
+}
 
-export const loadTheme = () => localStorage.getItem(THEME_KEY) || 'dark'
-export const saveTheme = theme => localStorage.setItem(THEME_KEY, theme)
+export const loadTheme = () => localStorage.getItem(KEYS.theme) || 'dark'
+export const saveTheme = theme => localStorage.setItem(KEYS.theme, theme)
 
-/** Editor pane width, as a percentage of the main card. */
-const EDITOR_WIDTH_KEY = 'editcv_editor_width'
-export const loadEditorWidth = () => Number(localStorage.getItem(EDITOR_WIDTH_KEY)) || 50
-export const saveEditorWidth = percent => localStorage.setItem(EDITOR_WIDTH_KEY, percent.toFixed(1))
+export const loadEditorWidth = () => Number(localStorage.getItem(KEYS.editorWidth)) || 50
+export const saveEditorWidth = percent => localStorage.setItem(KEYS.editorWidth, percent.toFixed(1))
+
+export const loadActiveId = () => localStorage.getItem(KEYS.activeId)
+export const saveActiveId = id => localStorage.setItem(KEYS.activeId, id)
+
+// ── CVs ───────────────────────────────────────────────────────────────────────
 
 export function loadCVs() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []
+    return JSON.parse(localStorage.getItem(KEYS.cvs)) || []
   } catch {
     return []
   }
 }
 
+const saveCVs = cvs => localStorage.setItem(KEYS.cvs, JSON.stringify(cvs))
+
+/** Inserts the CV, or replaces the stored one with the same id. */
 export function saveCV(cv) {
-  const cvs = loadCVs()
-  const idx = cvs.findIndex(c => c.id === cv.id)
-  if (idx >= 0) cvs[idx] = cv
+  const cvs   = loadCVs()
+  const index = cvs.findIndex(c => c.id === cv.id)
+  if (index >= 0) cvs[index] = cv
   else cvs.push(cv)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cvs))
+  saveCVs(cvs)
 }
 
 export function deleteCV(id) {
-  const cvs = loadCVs().filter(c => c.id !== id)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cvs))
+  saveCVs(loadCVs().filter(c => c.id !== id))
 }
 
-export function createCV(name = 'New CV') {
+/** A new, unsaved CV filled with an example to start from. */
+export function createCV(name) {
   return {
     id: Date.now().toString(),
     name,
@@ -39,14 +49,6 @@ export function createCV(name = 'New CV') {
     updatedAt: new Date().toISOString(),
     archived: false,
   }
-}
-
-export function getActiveId() {
-  return localStorage.getItem(ACTIVE_KEY)
-}
-
-export function setActiveId(id) {
-  localStorage.setItem(ACTIVE_KEY, id)
 }
 
 function defaultYaml(name) {

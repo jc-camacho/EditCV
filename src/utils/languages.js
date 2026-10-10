@@ -23,7 +23,7 @@ export const LANGUAGES = {
   },
 }
 
-export const DEFAULT_LANGUAGE = 'en'
+const DEFAULT_LANGUAGE = 'en'
 
 /** Key in LANGUAGES for `es`, `ES`, `es-419`, `es_BO`…; anything unknown is English. */
 export function languageKey(code) {

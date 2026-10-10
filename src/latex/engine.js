@@ -14,10 +14,12 @@
  * nothing is requested from outside the app's own origin. The whole archive is
  * downloaded once, in parallel with the engine, and handed to the worker before
  * the first compile: left alone, the worker would fetch each file with its own
- * synchronous request, one round trip after another. index.html preloads the
- * manifest and the archive (see vite.config.js), so the download starts with
- * the page instead of after React mounts; plain fetch() calls reuse them. The worker is also patched
- * to only request files listed in the manifest (see public/swiftlatex/README.md).
+ * synchronous request, one round trip after another.
+ *
+ * index.html preloads the manifest and the archive (see vite.config.js), so the
+ * download starts with the page instead of after React mounts; the fetch()
+ * calls below reuse those responses. The worker is also patched to only
+ * request files listed in the manifest (see public/swiftlatex/README.md).
  */
 
 const ENGINE_DIR = `${import.meta.env.BASE_URL}swiftlatex/`
@@ -25,9 +27,25 @@ const ENGINE_URL = `${ENGINE_DIR}swiftlatexpdftex.js`
 const BUNDLE_URL = `${ENGINE_DIR}pdftex/`
 const MAIN_FILE  = 'main.tex'
 
+const PROGRESS_INTERVAL_MS = 100
+
 let worker       = null
 let readyPromise = null
 let queue        = Promise.resolve() // pdfTeX can only run one compilation at a time
+
+/** Logs how long a start-up or compile step took, to diagnose slow loads from the console. */
+export function logTiming(step, start) {
+  console.info(`[EditCV] ${step}: ${Math.round(performance.now() - start)} ms (at ${Math.round(performance.now())} ms)`)
+}
+
+/** Drops the current worker so the next compilation starts from a fresh one. */
+function resetEngine() {
+  worker?.terminate()
+  worker       = null
+  readyPromise = null
+}
+
+// ── Start-up progress ─────────────────────────────────────────────────────────
 
 /**
  * Engine start-up progress, for the UI. pdfTeX reports nothing while it
@@ -37,13 +55,6 @@ let queue        = Promise.resolve() // pdfTeX can only run one compilation at a
  *   { phase: 'prepare' }                  unpacking the bundle, booting the worker
  *   null                                  not loading (ready, or not started)
  */
-/** Logs how long a start-up or compile step took, to diagnose slow loads from the console. */
-export function logTiming(step, start) {
-  console.info(`[EditCV] ${step}: ${Math.round(performance.now() - start)} ms (at ${Math.round(performance.now())} ms)`)
-}
-
-const PROGRESS_INTERVAL_MS = 100
-
 let loadProgress = null
 const progressListeners = new Set()
 
@@ -58,6 +69,14 @@ export function onEngineProgress(listener) {
   listener(loadProgress)
   return () => progressListeners.delete(listener)
 }
+
+/** Percentage of the engine download, or null when it can't be measured. */
+export function downloadPercent(progress) {
+  if (progress?.phase !== 'download' || !progress.total) return null
+  return Math.min(100, Math.round((progress.loaded / progress.total) * 100))
+}
+
+// ── Loading the engine ────────────────────────────────────────────────────────
 
 async function fetchBundleFile(path) {
   const response = await fetch(BUNDLE_URL + path)
@@ -149,15 +168,14 @@ function startEngine() {
     })
     .catch(error => {
       reportProgress(null)
-      // Allow a later retry instead of caching the failure forever
-      worker?.terminate()
-      worker       = null
-      readyPromise = null
+      resetEngine() // allow a later retry instead of caching the failure forever
       throw error
     })
 
   return readyPromise
 }
+
+// ── Compiling ─────────────────────────────────────────────────────────────────
 
 async function runCompilation(source) {
   await startEngine()
@@ -177,10 +195,7 @@ async function runCompilation(source) {
       })
     }
     worker.onerror = () => {
-      // Start from a fresh worker on the next compilation
-      worker.terminate()
-      worker       = null
-      readyPromise = null
+      resetEngine()
       reject(new Error('The LaTeX engine crashed during compilation.'))
     }
 

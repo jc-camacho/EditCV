@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import yaml from 'js-yaml'
-import { formatSectionTitle } from '../utils/yamlParser'
+import { detectEntryType, formatSectionTitle } from '../utils/yamlParser'
 import { LANGUAGES, languageKey } from '../utils/languages'
 import Modal from './Modal'
 
@@ -86,25 +86,23 @@ const ENTRY_TYPES = {
   },
 }
 
+// Well-known section names, so even an empty section gets the right form
 const SECTION_TYPES = {
   education: 'education', experience: 'experience', projects: 'project',
   publications: 'publication', skills: 'skill', selected_honors: 'honor', summary: 'summary',
 }
 
-/** Entry type of a section: by its name first, then by the keys of its first entry. */
+// detectEntryType() result → form type; anything else (plain text) is 'summary'
+const FORM_TYPES = {
+  education: 'education', experience: 'experience', project: 'project',
+  publication: 'publication', skill: 'skill', bullet: 'honor', numbered: 'honor',
+}
+
+/** Form type of a section: by its name first, then by its first entry (the same rules the PDF uses). */
 function detectSectionType(sectionName, entries) {
   if (SECTION_TYPES[sectionName]) return SECTION_TYPES[sectionName]
-  // Check keys, not values: a freshly added entry has empty strings and must keep its type
-  const first = entries[0]
-  if (!first) return 'honor'
-  if (typeof first === 'string') return 'summary'
-  if ('institution' in first) return 'education'
-  if ('company' in first) return 'experience'
-  if ('title' in first && 'authors' in first) return 'publication'
-  if ('name' in first) return 'project'
-  if ('label' in first) return 'skill'
-  if ('summary' in first && !('bullet' in first)) return 'summary'
-  return 'honor'
+  if (entries.length === 0) return 'honor'
+  return FORM_TYPES[detectEntryType(entries[0])] ?? 'summary'
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { logTiming } from '../latex/engine'
+import { downloadPercent, logTiming } from '../latex/engine'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -110,12 +110,6 @@ function useDragToScroll() {
 }
 
 const formatMB = bytes => `${(bytes / 1048576).toFixed(1)} MB`
-
-/** Percentage of the engine download, or null when it can't be measured. */
-export function downloadPercent(progress) {
-  if (progress?.phase !== 'download' || !progress.total) return null
-  return Math.min(100, Math.round((progress.loaded / progress.total) * 100))
-}
 
 /** Spinner plus what the engine is doing; a progress bar while the download size is known. */
 function LoadingState({ status, engineProgress }) {

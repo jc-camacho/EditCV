@@ -16,7 +16,7 @@ const COMPILE_DELAY_MS = 400
 export function useLatexPdf(cvData, templateId) {
   const [state, setState] = useState({ pdf: null, status: 'idle', error: null })
   const [engineProgress, setEngineProgress] = useState(null)
-  const latestRequestRef  = useRef(0)
+  const latestRequestRef = useRef(0)
 
   useEffect(() => {
     const unsubscribe = onEngineProgress(setEngineProgress)

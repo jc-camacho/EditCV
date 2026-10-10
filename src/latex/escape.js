@@ -53,7 +53,7 @@ export function escapeLatex(raw) {
 }
 
 /** Only these protocols end up as clickable links in the PDF. */
-export function isSafeUrl(url) {
+function isSafeUrl(url) {
   try {
     const { protocol } = new URL(url)
     return ['http:', 'https:', 'mailto:', 'tel:'].includes(protocol)
@@ -67,7 +67,7 @@ export function isSafeUrl(url) {
  * argument (catcodes are already frozen there): characters TeX would
  * interpret are percent-encoded, and `%` / `#` are backslash-escaped.
  */
-export function escapeUrl(url) {
+function escapeUrl(url) {
   return sanitize(url)
     .replace(/[\\{}^~ ]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
     .replace(/[%#]/g, ch => '\\' + ch)

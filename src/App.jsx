@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Navbar from './components/Navbar'
 import Sidebar from './components/Sidebar'
 import Editor from './components/Editor'
-import PdfPreview, { downloadPercent } from './components/PdfPreview'
+import PdfPreview from './components/PdfPreview'
 import ExportModal from './components/ExportModal'
 import Splitter from './components/Splitter'
 import { TEMPLATES, DEFAULT_TEMPLATE } from './latex/templates'
 import { useLatexPdf } from './latex/useLatexPdf'
+import { downloadPercent } from './latex/engine'
 import { parseCV } from './utils/yamlParser'
-import { loadCVs, saveCV, createCV, getActiveId, setActiveId, loadTheme, saveTheme, loadEditorWidth, saveEditorWidth } from './utils/storage'
+import { loadCVs, saveCV, createCV, loadActiveId, saveActiveId, loadTheme, saveTheme, loadEditorWidth, saveEditorWidth } from './utils/storage'
 
 const AUTOSAVE_DELAY_MS = 600
 const PAGE_WIDTH_PX     = 816 // US Letter at 96dpi
@@ -33,7 +34,7 @@ function downloadFile(content, filename, mimeType) {
  *   user edits YAML / form
  *     → yamlText changes → parsed CV is recomputed
  *     → LaTeX is regenerated and compiled (debounced) → PdfPreview re-renders
- *     → auto-save fires after 600 ms of inactivity
+ *     → auto-save fires after AUTOSAVE_DELAY_MS of inactivity
  */
 export default function App() {
   const [theme, setTheme]           = useState(loadTheme)
@@ -53,6 +54,11 @@ export default function App() {
   const { data: parsedCV, error: parseError } = useMemo(() => parseCV(yamlText), [yamlText])
   const latex = useLatexPdf(parsedCV, template)
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    saveTheme(theme)
+  }, [theme])
+
   useEffect(() => saveEditorWidth(editorWidth), [editorWidth])
 
   // Keeps both panes at least MIN_PANE_PX wide
@@ -60,11 +66,6 @@ export default function App() {
     const min = Math.min(50, (MIN_PANE_PX / totalWidth) * 100)
     setEditorWidth(Math.max(min, Math.min(100 - min, percent)))
   }
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    saveTheme(theme)
-  }, [theme])
 
   // Zoom that makes the page fill the preview pane's width
   function fitToWidth() {
@@ -88,7 +89,7 @@ export default function App() {
     }
     setCVs(storedCVs)
 
-    const lastActiveId = getActiveId()
+    const lastActiveId = loadActiveId()
     openCV(storedCVs.find(c => c.id === lastActiveId) || storedCVs.find(c => !c.archived) || storedCVs[0])
   }, [])
 
@@ -124,7 +125,7 @@ export default function App() {
   function openCV(cv) {
     activeCVIdRef.current = cv.id
     setActiveCVId(cv.id)
-    setActiveId(cv.id)
+    saveActiveId(cv.id)
     setYamlText(cv.yaml)
   }
 

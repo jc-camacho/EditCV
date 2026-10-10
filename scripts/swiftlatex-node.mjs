@@ -59,7 +59,6 @@ export async function createEngine({ resolveFile, files = null, verbose = false 
   else context.self.texlive_files = { has: () => true }
 
   return {
-    writeFile: (name, src) => request({ cmd: 'writefile', url: name, src }),
     compileFormat: () => request({ cmd: 'compileformat' }),
     addTexFile: (key, src) => send({ cmd: 'addtexfile', key, name: path.basename(key), src }),
     async compile(source, mainFile = 'main.tex') {
