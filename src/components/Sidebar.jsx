@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createCV, saveCV, deleteCV } from '../utils/storage'
+import Modal from './Modal'
 
 const IconPlus = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -40,13 +41,23 @@ const IconUnarchive = () => (
   </svg>
 )
 
+const IconStar = ({ filled }) => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+    <path d="M6.5 1.3l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6L1.3 5.1l3.6-.5z" />
+  </svg>
+)
+
+// Favorites first; otherwise keeps the stored order (sort is stable)
+const favoritesFirst = cvs => [...cvs].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite))
+
 export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
   const [editingId, setEditingId]       = useState(null)
   const [editingName, setEditingName]   = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [cvToDelete, setCVToDelete]     = useState(null) // favorite CV awaiting confirmation
 
-  const visibleCVs  = cvs.filter(cv => !cv.archived)
-  const archivedCVs = cvs.filter(cv => cv.archived)
+  const visibleCVs  = favoritesFirst(cvs.filter(cv => !cv.archived))
+  const archivedCVs = favoritesFirst(cvs.filter(cv => cv.archived))
 
   // Open another visible CV when the active one disappears from the list
   function leave(id) {
@@ -62,12 +73,23 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
     onSelect(newCV.id)
   }
 
-  function handleDelete(e, id) {
-    e.stopPropagation()
+  function deleteNow(id) {
     if (cvs.length === 1) return // keep at least one CV so the editor is never empty
     deleteCV(id)
     onCVsChange()
     leave(id)
+  }
+
+  // Favorites ask for confirmation first
+  function handleDelete(e, cv) {
+    e.stopPropagation()
+    if (cv.favorite) setCVToDelete(cv)
+    else deleteNow(cv.id)
+  }
+
+  function confirmDelete() {
+    deleteNow(cvToDelete.id)
+    setCVToDelete(null)
   }
 
   function handleToggleArchive(e, cv) {
@@ -75,6 +97,12 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
     saveCV({ ...cv, archived: !cv.archived })
     onCVsChange()
     if (!cv.archived) leave(cv.id)
+  }
+
+  function handleToggleFavorite(e, cv) {
+    e.stopPropagation()
+    saveCV({ ...cv, favorite: !cv.favorite })
+    onCVsChange()
   }
 
   function startRenaming(e, cv) {
@@ -104,12 +132,20 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
       ) : (
         <>
           <span className="itemName">{cv.name}</span>
+          <button
+            className={`btnIcon sm bare favoriteBtn${cv.favorite ? ' on' : ''}`}
+            title={cv.favorite ? 'Remove from favorites' : 'Add to favorites'}
+            aria-pressed={!!cv.favorite}
+            onClick={e => handleToggleFavorite(e, cv)}
+          >
+            <IconStar filled={cv.favorite} />
+          </button>
           <span className="itemActions">
             <button className="btnIcon sm bare" title="Rename" onClick={e => startRenaming(e, cv)}><IconEdit /></button>
             <button className="btnIcon sm bare" title={cv.archived ? 'Unarchive' : 'Archive'} onClick={e => handleToggleArchive(e, cv)}>
               {cv.archived ? <IconUnarchive /> : <IconArchive />}
             </button>
-            <button className="btnIcon sm bare" title="Delete" onClick={e => handleDelete(e, cv.id)} disabled={cvs.length === 1}><IconTrash /></button>
+            <button className="btnIcon sm bare" title="Delete" onClick={e => handleDelete(e, cv)} disabled={cvs.length === 1}><IconTrash /></button>
           </span>
         </>
       )}
@@ -127,6 +163,14 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
             {showArchived ? '▴' : '▸'} Archived ({archivedCVs.length})
           </button>
         </div>
+      )}
+      {cvToDelete && (
+        <Modal title="Delete favorite CV?" subtitle={`"${cvToDelete.name}" is marked as a favorite. This can't be undone.`} onClose={() => setCVToDelete(null)}>
+          <div className="modalActions">
+            <button className="btn btnGhost" onClick={() => setCVToDelete(null)}>Cancel</button>
+            <button className="btn btnDanger" onClick={confirmDelete} autoFocus>Delete</button>
+          </div>
+        </Modal>
       )}
     </aside>
   )

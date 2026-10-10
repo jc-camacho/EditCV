@@ -48,6 +48,7 @@ export function createCV(name) {
     yaml: defaultYaml(name),
     updatedAt: new Date().toISOString(),
     archived: false,
+    favorite: false,
   }
 }
 

@@ -81,6 +81,9 @@ button, input, select, textarea {
 .btnPrimary { background: var(--accent); color: #fff; }
 .btnPrimary:hover:not(:disabled) { opacity: 0.88; }
 
+.btnDanger { background: var(--danger); color: #fff; }
+.btnDanger:hover:not(:disabled) { opacity: 0.88; }
+
 .btnGhost { background: none; border-color: var(--border); color: var(--text-secondary); }
 .btnGhost:hover:not(:disabled) { background: var(--hover); color: var(--text-primary); }
 
@@ -389,6 +392,11 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .itemName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .itemActions { display: none; gap: 0.15rem; margin-left: 0.3rem; }
 .item:hover .itemActions, .item.active .itemActions { display: flex; }
+
+/* Favorite star: shown on hover, always shown once marked */
+.favoriteBtn { display: none; margin-left: 0.3rem; }
+.item:hover .favoriteBtn, .item.active .favoriteBtn, .favoriteBtn.on { display: flex; }
+.btnIcon.favoriteBtn.on, .btnIcon.favoriteBtn.on:hover { color: #f5b301; }
 
 .archivedSection { display: flex; flex-direction: column; margin-top: auto; padding-top: 0.4rem; }
 .archivedSection .item { opacity: 0.65; }
