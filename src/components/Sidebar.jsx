@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createCV, saveCV, deleteCV } from '../utils/storage'
 import Modal from './Modal'
+import ArchivedModal from './ArchivedModal'
 
 const IconPlus = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -53,11 +54,12 @@ const favoritesFirst = cvs => [...cvs].sort((a, b) => Number(!!b.favorite) - Num
 export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
   const [editingId, setEditingId]       = useState(null)
   const [editingName, setEditingName]   = useState('')
-  const [showArchived, setShowArchived] = useState(false)
+  const [showArchived, setShowArchived] = useState(false) // archived CVs modal
   const [cvToDelete, setCVToDelete]     = useState(null) // favorite CV awaiting confirmation
 
   const visibleCVs  = favoritesFirst(cvs.filter(cv => !cv.archived))
   const archivedCVs = favoritesFirst(cvs.filter(cv => cv.archived))
+  const activeArchivedCV = archivedCVs.find(cv => cv.id === activeCVId) // shown as a chip, since it's in no visible list
 
   // Open another visible CV when the active one disappears from the list
   function leave(id) {
@@ -117,8 +119,14 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
     setEditingId(null)
   }
 
+  // Opening an archived CV also closes the archived modal
+  function openCV(cv) {
+    onSelect(cv.id)
+    if (cv.archived) setShowArchived(false)
+  }
+
   const renderItem = cv => (
-    <li key={cv.id} className={`item${cv.id === activeCVId ? ' active' : ''}`} onClick={() => onSelect(cv.id)}>
+    <li key={cv.id} className={`item${cv.id === activeCVId ? ' active' : ''}`} onClick={() => openCV(cv)}>
       {editingId === cv.id ? (
         <input
           className="renameInput"
@@ -156,13 +164,14 @@ export default function Sidebar({ cvs, activeCVId, onSelect, onCVsChange }) {
     <aside className="card sidebar">
       <button className="btn btnPrimary block" onClick={handleNewCV}><IconPlus /> New CV</button>
       <ul className="list">{visibleCVs.map(renderItem)}</ul>
-      {archivedCVs.length > 0 && (
-        <div className="archivedSection">
-          {showArchived && <ul className="list">{archivedCVs.map(renderItem)}</ul>}
-          <button className="archivedToggle" onClick={() => setShowArchived(s => !s)}>
-            {showArchived ? '▴' : '▸'} Archived ({archivedCVs.length})
-          </button>
-        </div>
+      <div className="sidebarFooter">
+        {activeArchivedCV && <ul className="list activeArchived" title="You are editing an archived CV">{renderItem(activeArchivedCV)}</ul>}
+        <button className="archivedButton" onClick={() => setShowArchived(true)}>
+          <IconArchive /> Archived ({archivedCVs.length})
+        </button>
+      </div>
+      {showArchived && (
+        <ArchivedModal cvs={archivedCVs} renderItem={renderItem} onClose={() => setShowArchived(false)} />
       )}
       {cvToDelete && (
         <Modal title="Delete favorite CV?" subtitle={`"${cvToDelete.name}" is marked as a favorite. This can't be undone.`} onClose={() => setCVToDelete(null)}>

@@ -391,19 +391,18 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
 .itemName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .itemActions { display: none; gap: 0.15rem; margin-left: 0.3rem; }
-.item:hover .itemActions, .item.active .itemActions { display: flex; }
+.item:hover .itemActions { display: flex; }
 
 /* Favorite star: shown on hover, always shown once marked */
 .favoriteBtn { display: none; margin-left: 0.3rem; }
-.item:hover .favoriteBtn, .item.active .favoriteBtn, .favoriteBtn.on { display: flex; }
+.item:hover .favoriteBtn, .favoriteBtn.on { display: flex; }
 .btnIcon.favoriteBtn.on, .btnIcon.favoriteBtn.on:hover { color: #f5b301; }
 
-.archivedSection { display: flex; flex-direction: column; margin-top: auto; padding-top: 0.4rem; }
-.archivedSection .item { opacity: 0.65; }
-.archivedSection .item:hover, .archivedSection .item.active { opacity: 1; }
-
-.archivedToggle {
-  padding: 0.45rem 0.6rem 0.15rem;
+.archivedButton {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem 0.15rem;
   background: none;
   border: none;
   border-top: 1px solid var(--border);
@@ -415,7 +414,21 @@ textarea.input { resize: vertical; line-height: 1.5; }
   cursor: pointer;
 }
 
-.archivedToggle:hover { color: var(--text-primary); }
+.archivedButton:hover { color: var(--text-primary); }
+
+/* Pinned to the bottom of the sidebar */
+.sidebarFooter { display: flex; flex-direction: column; gap: 0.5rem; margin-top: auto; }
+
+/* The CV being edited, when it is archived (it appears in no sidebar list): same row, as a chip */
+.activeArchived .item {
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  color: var(--accent);
+}
+
+/* Archived CVs modal */
+.archivedList { max-height: 50vh; margin-top: 0.75rem; overflow-y: auto; }
+.archivedEmpty { padding: 1rem 0; font-size: 0.8rem; text-align: center; color: var(--text-secondary); }
 
 /* ── PDF preview ────────────────────────────────────────────── */
 .previewWrapper {
